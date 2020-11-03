@@ -27,12 +27,13 @@ from PIL import Image, ImageOps, ImageFont, ImageDraw
 
 import load_data
 import model
+import plot
 
 # preferably use the non-display gpu for training
 # os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
-# os.environ['CUDA_VISIBLE_DEVICES']='1'
+os.environ['CUDA_VISIBLE_DEVICES']='1'
 # preferably use the display gpu for testing
-os.environ['CUDA_VISIBLE_DEVICES']='2'
+# os.environ['CUDA_VISIBLE_DEVICES']='2'
 
 print('\n\nPython VERSION:', sys.version)
 print('PyTorch VERSION:', torch.__version__)
@@ -363,7 +364,158 @@ def main():
         torch.save(model_checkpoint, model_path)
         print(f'\nTrained model/checkpoint has been saved to {model_path}\n')
 
+    if mode == 'test':
+        if torch.cuda.device_count() > 1:
+            print('\n', torch.cuda.device_count(), 'GPUs available')
+            device = torch.device('cuda')
+        else:
+            device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+        test_dir = args.test_dir[0]
+        model_dir = args.model_dir[0]
+        figs_dir = args.output_dir[0]
+        # useful arguments in this mode
+        target_dim = 2
+        loss = args.loss[0]
+        final_size = 256
+
+        # Read data
+        img1_name_list, img2_name_list, gt_name_list = load_data.read_all(test_dir)
+        # construct dataset
+        test_data, test_labels = load_data.construct_dataset(img1_name_list, img2_name_list, gt_name_list)
+        # parameters loaded from input data
+        num_channels = test_data.shape[1] // 2
+
+        if verbose:
+            print(f'\nmode: {mode}')
+            print(f'\nGPU usage: {device}')
+            print(f'testing data dir: {test_dir}')
+            print(f'input model dir: {model_dir}')
+            print(f'output figures dir: {figs_dir}')
+            print(f'loss function: {loss}')
+            print(f'number of image channel: {num_channels}')
+            print(f'test_data has shape: {test_data.shape}')
+            print(f'test_labels has shape: {test_labels.shape}')
+
+        # run the inference
+        with torch.no_grad():
+            # start and end of index (both inclusive)
+            start_index = 0
+            end_index = 250
+            # check if input parameters are valid
+            if start_index < 0:
+                raise Exception('Invalid start_index')
+            elif end_index > test_data.shape[0]-1:
+                raise Exception(f'Invalid end_index > total number of image pair {test_data.shape[0]}')
+
+            # define the loss
+            if loss == 'MSE' or loss == 'RMSE':
+                loss_module = torch.nn.MSELoss()
+            elif loss == 'MAE':
+                loss_module = torch.nn.L1Loss()
+
+            # model, optimizer and loss
+            piv_lfn_en = model.PIV_LiteFlowNet_en()
+            piv_lfn_en.eval()
+            piv_lfn_en.to(device)
+
+            # load trained model
+            trained_model = torch.load(model_dir)
+            piv_lfn_en.load_state_dict(trained_model['state_dict'])
+
+            min_loss = 999
+            min_loss_index = 0
+            all_losses = []
+
+            for k in range(start_index, end_index+1):
+                cur_image_pair = test_data[k:k+1].to(device)
+                cur_label_true = test_labels[k].permute(1, 2, 0).numpy()
+                # get prediction from loaded model
+                prediction = piv_lfn_en(cur_image_pair)
+
+                # put on cpu and permute to channel last
+                cur_label_pred = prediction.cpu().data
+                cur_label_pred = cur_label_pred.permute(0, 2, 3, 1).numpy()
+                cur_label_pred = cur_label_pred[0]
+
+                # compute loss
+                cur_loss = loss_module(torch.from_numpy(cur_label_pred), torch.from_numpy(cur_label_true))
+                if loss == 'RMSE':
+                    cur_loss = torch.sqrt(cur_loss)
+                    # convert to per pixel
+                    cur_loss = cur_loss / final_size
+                elif loss == 'AEE':
+                    sum_endpoint_error = 0
+                    for i in range(final_size):
+                        for j in range(final_size):
+                            cur_pred = cur_label_pred[i, j]
+                            cur_true = cur_label_true[i, j]
+                            cur_endpoint_error = np.linalg.norm(cur_pred-cur_true)
+                            sum_endpoint_error += cur_endpoint_error
+
+                    # compute the average endpoint error
+                    aee = sum_endpoint_error / (final_size*final_size)
+                    # convert to per 100 pixels for comparison purpose
+                    cur_loss = aee / final_size
+
+                if cur_loss < min_loss:
+                    min_loss = cur_loss
+                    min_loss_index = k
+
+                all_losses.append(cur_loss)
+
+                print(f'Prediction {loss} for {k}th image pair is {cur_loss}')
+
+                # visualize the flow
+                cur_flow_true = plot.visualize_flow(cur_label_true)
+                cur_flow_pred = plot.visualize_flow(cur_label_pred)
+
+                # convert to Image
+                cur_test_image1 = Image.fromarray(test_data[k, :, :, 0].numpy())
+                cur_test_image2 = Image.fromarray(test_data[k, :, :, 1].numpy())
+                cur_flow_true = Image.fromarray(cur_flow_true)
+                cur_flow_pred = Image.fromarray(cur_flow_pred)
+
+                # superimpose quiver plot on color-coded images
+                # ground truth
+                x = np.linspace(0, final_size-1, final_size)
+                y = np.linspace(0, final_size-1, final_size)
+                y_pos, x_pos = np.meshgrid(x, y)
+                skip = 8
+                plt.figure()
+                plt.imshow(cur_flow_true)
+                plt.quiver(y_pos[::skip, ::skip],
+                            x_pos[::skip, ::skip],
+                            cur_label_true[::skip, ::skip, 0],
+                            -cur_label_true[::skip, ::skip, 1])
+                plt.axis('off')
+                true_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_true.svg')
+                plt.savefig(true_quiver_path, bbox_inches='tight', dpi=1200)
+                print(f'ground truth quiver plot has been saved to {true_quiver_path}')
+
+                # prediction
+                plt.figure()
+                plt.imshow(cur_flow_pred)
+                plt.quiver(y_pos[::skip, ::skip],
+                            x_pos[::skip, ::skip],
+                            cur_label_pred[::skip, ::skip, 0],
+                            -cur_label_pred[::skip, ::skip, 1])
+                plt.axis('off')
+                pred_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_pred.svg')
+                plt.savefig(pred_quiver_path, bbox_inches='tight', dpi=1200)
+                print(f'prediction quiver plot has been saved to {pred_quiver_path}')
+
+        print(f'\nModel inference on image [{start_index}:{end_index}] completed\n')
+        print(f'Min loss is {min_loss} at index {min_loss_index}')
+
+        # save the result to a .text file
+        text_path = os.path.join(figs_dir, 'results_sheet.txt')
+        np.savetxt(text_path,
+                    all_losses,
+                    fmt='%10.5f',
+                    header=f'{loss} of {end_index-start_index+1} image pairs',
+                    footer=f'Min loss is {min_loss} at index {min_loss_index}')
+        print(f'result sheet has been saved at {text_path}')
 
 if __name__ == "__main__":
     main()
