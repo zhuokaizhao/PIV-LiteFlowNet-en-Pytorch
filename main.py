@@ -312,56 +312,56 @@ def main():
 
                 print('\n')
 
-        epoch_end_time = time.time()
-        batch_avg_train_loss = np.mean(all_batch_train_losses)
-        batch_avg_val_loss = np.mean(all_batch_val_losses)
-        all_epoch_train_losses.append(batch_avg_train_loss)
-        all_epoch_val_losses.append(batch_avg_val_loss)
-        print('\nEpoch %d completed in %.3f seconds, avg train loss: %.3f, avg val loss: %.3f'
-                    % ((i+1), (epoch_end_time-epoch_start_time), all_epoch_train_losses[-1], all_epoch_val_losses[-1]))
+            epoch_end_time = time.time()
+            batch_avg_train_loss = np.mean(all_batch_train_losses)
+            batch_avg_val_loss = np.mean(all_batch_val_losses)
+            all_epoch_train_losses.append(batch_avg_train_loss)
+            all_epoch_val_losses.append(batch_avg_val_loss)
+            print('\nEpoch %d completed in %.3f seconds, avg train loss: %.3f, avg val loss: %.3f'
+                        % ((i+1), (epoch_end_time-epoch_start_time), all_epoch_train_losses[-1], all_epoch_val_losses[-1]))
 
-    train_end_time = time.time()
-    print('\nTraining completed in %.3f seconds' % (train_end_time-train_start_time))
+        train_end_time = time.time()
+        print('\nTraining completed in %.3f seconds' % (train_end_time-train_start_time))
 
-    # save loss graph
-    if checkpoint_path != None:
-        prev_train_losses = checkpoint['train_loss']
-        prev_val_losses = checkpoint['val_loss']
-        all_epoch_train_losses = prev_train_losses + all_epoch_train_losses
-        all_epoch_val_losses = prev_val_losses + all_epoch_val_losses
+        # save loss graph
+        if checkpoint_path != None:
+            prev_train_losses = checkpoint['train_loss']
+            prev_val_losses = checkpoint['val_loss']
+            all_epoch_train_losses = prev_train_losses + all_epoch_train_losses
+            all_epoch_val_losses = prev_val_losses + all_epoch_val_losses
 
-    plt.plot(all_epoch_train_losses, label='Train')
-    plt.plot(all_epoch_val_losses, label='Validation')
-    plt.title(f'Training and validation loss on PIV-LiteFlowNet-en model')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend(loc='upper right')
-    loss_path = os.path.join(figs_dir, f'piv_lfn_en_loss_{starting_epoch+num_epoch}.png')
-    plt.savefig(loss_path)
-    print(f'\nLoss graph has been saved to {loss_path}')
+        plt.plot(all_epoch_train_losses, label='Train')
+        plt.plot(all_epoch_val_losses, label='Validation')
+        plt.title(f'Training and validation loss on PIV-LiteFlowNet-en model')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.legend(loc='upper right')
+        loss_path = os.path.join(figs_dir, f'piv_lfn_en_loss_{starting_epoch+num_epoch}.png')
+        plt.savefig(loss_path)
+        print(f'\nLoss graph has been saved to {loss_path}')
 
-    # save model as a checkpoint so further training could be resumed
-    model_path = os.path.join(model_dir, f'PIV-LiteFlowNet-en_{starting_epoch+num_epoch}.pt')
-    # if trained on multiple GPU's, store model.module.state_dict()
-    if torch.cuda.device_count() > 1:
-        model_checkpoint = {
-                                'epoch': starting_epoch+num_epoch,
-                                'state_dict': piv_lfn_en.module.state_dict(),
-                                'optimizer': optimizer.state_dict(),
-                                'train_loss': all_epoch_train_losses,
-                                'val_loss': all_epoch_val_losses
-                            }
-    else:
-        model_checkpoint = {
-                                'epoch': starting_epoch+num_epoch,
-                                'state_dict': piv_lfn_en.state_dict(),
-                                'optimizer': optimizer.state_dict(),
-                                'train_loss': all_epoch_train_losses,
-                                'val_loss': all_epoch_val_losses
-                            }
+        # save model as a checkpoint so further training could be resumed
+        model_path = os.path.join(model_dir, f'PIV-LiteFlowNet-en_{starting_epoch+num_epoch}.pt')
+        # if trained on multiple GPU's, store model.module.state_dict()
+        if torch.cuda.device_count() > 1:
+            model_checkpoint = {
+                                    'epoch': starting_epoch+num_epoch,
+                                    'state_dict': piv_lfn_en.module.state_dict(),
+                                    'optimizer': optimizer.state_dict(),
+                                    'train_loss': all_epoch_train_losses,
+                                    'val_loss': all_epoch_val_losses
+                                }
+        else:
+            model_checkpoint = {
+                                    'epoch': starting_epoch+num_epoch,
+                                    'state_dict': piv_lfn_en.state_dict(),
+                                    'optimizer': optimizer.state_dict(),
+                                    'train_loss': all_epoch_train_losses,
+                                    'val_loss': all_epoch_val_losses
+                                }
 
-    torch.save(model_checkpoint, model_path)
-    print(f'\nTrained model/checkpoint has been saved to {model_path}\n')
+        torch.save(model_checkpoint, model_path)
+        print(f'\nTrained model/checkpoint has been saved to {model_path}\n')
 
 
 
