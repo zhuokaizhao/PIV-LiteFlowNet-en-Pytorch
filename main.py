@@ -53,9 +53,6 @@ def check_system():
     if sys.version_info.minor < 4 or sys.version_info.minor > 7:
         raise Exception('Python 3.4 - 3.7 is required')
 
-    if int(tf.__version__.split('.')[0]) < 2:
-        raise Exception('TensorFlow 2 is required')
-
     if not int(str('').join(torch.__version__.split('.')[0:2])) >= 13:
         raise Exception('At least PyTorch version 1.3.0 is needed')
 
