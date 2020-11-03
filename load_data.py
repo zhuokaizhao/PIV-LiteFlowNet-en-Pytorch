@@ -56,7 +56,7 @@ def construct_dataset(img1_name_list,
     # load the first sample to determine the image size
     temp = np.asarray(Image.open(img1_name_list[0])) * 1.0 / 255.0
     img_height, img_width = temp.shape
-    print(f'Input image has size ({img_height}, {img_width})')
+    # print(f'Input image has size ({img_height}, {img_width})')
     # load first image, second image and labels
     # concatenate image pair on channel axis
     image_pairs = np.zeros((amount, img_height, img_width, 2))
@@ -67,8 +67,8 @@ def construct_dataset(img1_name_list,
         labels[i] = fz.read_flow(label_name_list[i])
 
     # prepare pytorch training data (channel first)
-    train_data = torch.from_numpy(train_data).float().permute(0, 3, 1, 2)
-    train_labels = torch.from_numpy(train_labels).float().permute(0, 3, 1, 2)
+    image_pairs = torch.from_numpy(image_pairs).float().permute(0, 3, 1, 2)
+    labels = torch.from_numpy(labels).float().permute(0, 3, 1, 2)
 
     return image_pairs, labels
 

@@ -25,7 +25,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from PIL import Image, ImageOps, ImageFont, ImageDraw
 
-import data
+import load_data
 import model
 
 # preferably use the non-display gpu for training
@@ -111,7 +111,6 @@ def main():
 
     mode = args.mode[0]
     verbose = args.verbose
-    overwrite = args.overwrite
 
     if mode == 'train':
         if torch.cuda.device_count() > 1:
@@ -140,10 +139,6 @@ def main():
         num_epoch = int(args.num_epoch[0])
         batch_size = int(args.batch_size[0])
         target_dim = 2
-        if args.time_span != None:
-            time_span = int(args.time_span[0])
-        else:
-            time_span = None
         loss = args.loss[0]
 
         # make sure the model_dir is valid
@@ -154,14 +149,14 @@ def main():
         # load the data
         print(f'\nLoading datasets')
         # Read data
-        train_img1_name_list, train_img2_name_list, train_gt_name_list = data.read_all(train_dir)
-        val_img1_name_list, val_img2_name_list, val_gt_name_list = data.read_all(val_dir)
+        train_img1_name_list, train_img2_name_list, train_gt_name_list = load_data.read_all(train_dir)
+        val_img1_name_list, val_img2_name_list, val_gt_name_list = load_data.read_all(val_dir)
         # construct dataset
-        train_data, train_labels = data.construct_dataset(train_img1_name_list,
+        train_data, train_labels = load_data.construct_dataset(train_img1_name_list,
                                                             train_img2_name_list,
                                                             train_gt_name_list)
 
-        val_data, val_labels = data.construct_dataset(val_img1_name_list,
+        val_data, val_labels = load_data.construct_dataset(val_img1_name_list,
                                                         val_img2_name_list,
                                                         val_gt_name_list)
 
@@ -196,11 +191,11 @@ def main():
 
         if torch.cuda.device_count() > 1:
             print('\nUsing', torch.cuda.device_count(), 'GPUs')
-            lmsi_model = torch.nn.DataParallel(lmsi_model)
+            piv_lfn_en = torch.nn.DataParallel(piv_lfn_en)
 
-        lmsi_model.to(device)
+        piv_lfn_en.to(device)
         # define optimizer
-        optimizer = torch.optim.Adam(lmsi_model.parameters(), lr=1e-4)
+        optimizer = torch.optim.Adam(piv_lfn_en.parameters(), lr=1e-4)
 
         if checkpoint_path != None:
             optimizer.load_state_dict(checkpoint['optimizer'])
@@ -257,7 +252,7 @@ def main():
 
                     if phase == 'train':
                         # train/validate
-                        cur_label_pred = lmsi_model(batch_data)
+                        cur_label_pred = piv_lfn_en(batch_data)
 
                         # compute loss
                         train_loss = loss_module(cur_label_pred, batch_labels)
@@ -289,12 +284,12 @@ def main():
                                             length=50)
 
                     elif phase == 'val':
-                        lmsi_model.eval()
+                        piv_lfn_en.eval()
 
                         with torch.no_grad():
 
                             # train/validate
-                            cur_label_pred = lmsi_model(batch_data)
+                            cur_label_pred = piv_lfn_en(batch_data)
 
                             # compute loss
                             val_loss = loss_module(cur_label_pred, batch_labels)
@@ -351,7 +346,7 @@ def main():
     if torch.cuda.device_count() > 1:
         model_checkpoint = {
                                 'epoch': starting_epoch+num_epoch,
-                                'state_dict': lmsi_model.module.state_dict(),
+                                'state_dict': piv_lfn_en.module.state_dict(),
                                 'optimizer': optimizer.state_dict(),
                                 'train_loss': all_epoch_train_losses,
                                 'val_loss': all_epoch_val_losses
@@ -359,7 +354,7 @@ def main():
     else:
         model_checkpoint = {
                                 'epoch': starting_epoch+num_epoch,
-                                'state_dict': lmsi_model.state_dict(),
+                                'state_dict': piv_lfn_en.state_dict(),
                                 'optimizer': optimizer.state_dict(),
                                 'train_loss': all_epoch_train_losses,
                                 'val_loss': all_epoch_val_losses

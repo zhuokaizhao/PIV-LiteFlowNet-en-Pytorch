@@ -4,15 +4,13 @@
 import os
 import time
 import torch
-import e2cnn
 import datetime
 import itertools
-import torchvision
 import numpy as np
 from PIL import Image
 
 import correlation
-import lmsi_layers_pt
+import layers
 
 # use cudnn
 torch.backends.cudnn.enabled = True
@@ -172,12 +170,6 @@ class PIV_LiteFlowNet_en(torch.nn.Module):
                                                                   padding=1,
                                                                   bias=False,
                                                                   groups=2)
-                    # PIV-LiteFlowNet-en change 2, make the dimensionality of velocity field consistent with image features
-                    self.normalize_flow = torch.nn.Conv2d(in_channels=2,
-                                                            out_channels=49,
-                                                            kernel_size=3,
-                                                            stride=1,
-                                                            padding=1)
 
                 # to speed up, no correlation on level 4, 5, 6
                 if level >= 4:
@@ -232,10 +224,8 @@ class PIV_LiteFlowNet_en(torch.nn.Module):
                 if self.upsample_flow != None:
                     flow_tensor = self.upsample_flow(flow_tensor)
                     flow_tensor_scaled = flow_tensor * self.flow_scale
-                    # PIV-LiteFlowNet-en change 2, make the dimensionality of velocity field consistent with image features
-                    flow_tensor_scaled = self.normalize_flow(flow_tensor_scaled)
                     # feature warping
-                    feat_tensor_2 = lmsi_layers_pt.backwarp(feat_tensor_2, flow_tensor_scaled)
+                    feat_tensor_2 = layers.backwarp(feat_tensor_2, flow_tensor_scaled)
 
                 # level 4, 5, 6 it is None
                 if self.upsample_corr == None:
@@ -273,13 +263,25 @@ class PIV_LiteFlowNet_en(torch.nn.Module):
                                         padding=0),
                         torch.nn.LeakyReLU(inplace=False, negative_slope=0.1)
                     )
+                    # PIV-LiteFlowNet-en change 2, make the dimensionality of velocity field consistent with image features
+                    self.normalize_flow = torch.nn.Conv2d(in_channels=2,
+                                                            out_channels=64,
+                                                            kernel_size=3,
+                                                            stride=1,
+                                                            padding=1)
                 else:
                     self.feature_net = torch.nn.Sequential()
+                    # PIV-LiteFlowNet-en change 2, make the dimensionality of velocity field consistent with image features
+                    self.normalize_flow = torch.nn.Conv2d(in_channels=2,
+                                                            out_channels=32,
+                                                            kernel_size=3,
+                                                            stride=1,
+                                                            padding=1)
 
 
                 # subpixel CNN that trains output to further improve flow accuracy
                 self.subpixel_cnn = torch.nn.Sequential(
-                    torch.nn.Conv2d(in_channels=[ 0, 0, 130, 130, 194, 258, 386 ][level],
+                    torch.nn.Conv2d(in_channels=[ 0, 0, 192, 160, 224, 288, 416 ][level],
                                     out_channels=128,
                                     kernel_size=3,
                                     stride=1,
@@ -308,6 +310,8 @@ class PIV_LiteFlowNet_en(torch.nn.Module):
                 )
 
 
+
+
             def forward(self, flow_tensor, image_tensor_1, image_tensor_2, feat_tensor_1, feat_tensor_2):
 
                 # process feature tensors further based on levels
@@ -317,10 +321,13 @@ class PIV_LiteFlowNet_en(torch.nn.Module):
                 if flow_tensor != None:
                     # use flow from matching unit to warp feature 2 again
                     flow_tensor_scaled = flow_tensor * self.flow_scale
-                    feat_tensor_2 = lmsi_layers_pt.backwarp(feat_tensor_2, flow_tensor_scaled)
+                    feat_tensor_2 = layers.backwarp(feat_tensor_2, flow_tensor_scaled)
+
+                # PIV-LiteFlowNet-en change 2, make the dimensionality of velocity field consistent with image features
+                flow_tensor_scaled = self.normalize_flow(flow_tensor_scaled)
 
                 # volume that is going to be fed into subpixel CNN
-                volume = torch.cat([feat_tensor_1, feat_tensor_2, flow_tensor], axis=1)
+                volume = torch.cat([feat_tensor_1, feat_tensor_2, flow_tensor_scaled], axis=1)
                 delta_us = self.subpixel_cnn(volume)
 
                 return flow_tensor + delta_us
@@ -430,7 +437,7 @@ class PIV_LiteFlowNet_en(torch.nn.Module):
 
                 # distance between feature 1 and warped feature 2
                 flow_tensor_scaled = flow_tensor * self.flow_scale
-                feat_tensor_2 = lmsi_layers_pt.backwarp(feat_tensor_2, flow_tensor_scaled)
+                feat_tensor_2 = layers.backwarp(feat_tensor_2, flow_tensor_scaled)
                 squared_diff_tensor = torch.pow((feat_tensor_1 - feat_tensor_2), 2)
                 # sum the difference in both x and y
                 squared_diff_tensor = torch.sum(squared_diff_tensor, dim=1, keepdim=True)
@@ -479,8 +486,8 @@ class PIV_LiteFlowNet_en(torch.nn.Module):
                                                         groups=2)
 
     def forward(self, input_image_pair):
-        image_tensor_1 = input_image_pair[:, 0, :, :]
-        image_tensor_2 = input_image_pair[:, 1, :, :]
+        image_tensor_1 = input_image_pair[:, 0:1, :, :]
+        image_tensor_2 = input_image_pair[:, 1:, :, :]
         feat_tensor_pyramid_1 = self.NetC(image_tensor_1)
         feat_tensor_pyramid_2 = self.NetC(image_tensor_2)
 
