@@ -62,8 +62,8 @@ def construct_dataset(img1_name_list,
     image_pairs = np.zeros((amount, img_height, img_width, 2))
     labels = np.zeros((amount, img_height, img_width, 2))
     for i in range(amount):
-        image_pairs[i, :, :, 0:1] = np.asarray(Image.open(img1_name_list[0])).reshape(img_height, img_width, 1) * 1.0/255.0
-        image_pairs[i, :, :, 1:] = np.asarray(Image.open(img2_name_list[0])).reshape(img_height, img_width, 1) * 1.0/255.0
+        image_pairs[i, :, :, 0:1] = np.asarray(Image.open(img1_name_list[i])).reshape(img_height, img_width, 1) * 1.0/255.0
+        image_pairs[i, :, :, 1:] = np.asarray(Image.open(img2_name_list[i])).reshape(img_height, img_width, 1) * 1.0/255.0
         labels[i] = fz.read_flow(label_name_list[i])
 
     # prepare pytorch training data (channel first)
