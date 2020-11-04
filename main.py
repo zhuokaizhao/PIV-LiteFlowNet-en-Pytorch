@@ -31,7 +31,7 @@ import plot
 
 # preferably use the non-display gpu for training
 # os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
-os.environ['CUDA_VISIBLE_DEVICES']='1'
+os.environ['CUDA_VISIBLE_DEVICES']='0'
 # preferably use the display gpu for testing
 # os.environ['CUDA_VISIBLE_DEVICES']='2'
 
@@ -386,6 +386,8 @@ def main():
         # parameters loaded from input data
         num_channels = test_data.shape[1] // 2
 
+        visualize = True
+
         if verbose:
             print(f'\nmode: {mode}')
             print(f'\nGPU usage: {device}')
@@ -466,46 +468,51 @@ def main():
 
                 print(f'Prediction {loss} for {k}th image pair is {cur_loss}')
 
-                # visualize the flow
-                cur_flow_true = plot.visualize_flow(cur_label_true)
-                cur_flow_pred = plot.visualize_flow(cur_label_pred)
+                if visualize:
+                    # visualize the flow
+                    cur_flow_true = plot.visualize_flow(cur_label_true)
+                    cur_flow_pred = plot.visualize_flow(cur_label_pred)
 
-                # convert to Image
-                cur_test_image1 = Image.fromarray(test_data[k, :, :, 0].numpy())
-                cur_test_image2 = Image.fromarray(test_data[k, :, :, 1].numpy())
-                cur_flow_true = Image.fromarray(cur_flow_true)
-                cur_flow_pred = Image.fromarray(cur_flow_pred)
+                    # convert to Image
+                    cur_test_image1 = Image.fromarray(test_data[k, :, :, 0].numpy())
+                    cur_test_image2 = Image.fromarray(test_data[k, :, :, 1].numpy())
+                    cur_flow_true = Image.fromarray(cur_flow_true)
+                    cur_flow_pred = Image.fromarray(cur_flow_pred)
 
-                # superimpose quiver plot on color-coded images
-                # ground truth
-                x = np.linspace(0, final_size-1, final_size)
-                y = np.linspace(0, final_size-1, final_size)
-                y_pos, x_pos = np.meshgrid(x, y)
-                skip = 8
-                plt.figure()
-                plt.imshow(cur_flow_true)
-                plt.quiver(y_pos[::skip, ::skip],
-                            x_pos[::skip, ::skip],
-                            cur_label_true[::skip, ::skip, 0],
-                            -cur_label_true[::skip, ::skip, 1])
-                plt.axis('off')
-                true_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_true.svg')
-                plt.savefig(true_quiver_path, bbox_inches='tight', dpi=1200)
-                print(f'ground truth quiver plot has been saved to {true_quiver_path}')
+                    # superimpose quiver plot on color-coded images
+                    # ground truth
+                    x = np.linspace(0, final_size-1, final_size)
+                    y = np.linspace(0, final_size-1, final_size)
+                    y_pos, x_pos = np.meshgrid(x, y)
+                    skip = 8
+                    plt.figure()
+                    plt.imshow(cur_flow_true)
+                    plt.quiver(y_pos[::skip, ::skip],
+                                x_pos[::skip, ::skip],
+                                cur_label_true[::skip, ::skip, 0],
+                                -cur_label_true[::skip, ::skip, 1])
+                    plt.axis('off')
+                    true_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_true.svg')
+                    plt.savefig(true_quiver_path, bbox_inches='tight', dpi=1200)
+                    print(f'ground truth quiver plot has been saved to {true_quiver_path}')
 
-                # prediction
-                plt.figure()
-                plt.imshow(cur_flow_pred)
-                plt.quiver(y_pos[::skip, ::skip],
-                            x_pos[::skip, ::skip],
-                            cur_label_pred[::skip, ::skip, 0],
-                            -cur_label_pred[::skip, ::skip, 1])
-                plt.axis('off')
-                pred_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_pred.svg')
-                plt.savefig(pred_quiver_path, bbox_inches='tight', dpi=1200)
-                print(f'prediction quiver plot has been saved to {pred_quiver_path}')
+                    # prediction
+                    plt.figure()
+                    plt.imshow(cur_flow_pred)
+                    plt.quiver(y_pos[::skip, ::skip],
+                                x_pos[::skip, ::skip],
+                                cur_label_pred[::skip, ::skip, 0],
+                                -cur_label_pred[::skip, ::skip, 1])
+                    plt.axis('off')
+                    # annotate error
+                    plt.annotate(f'{loss}: ' + '{:.3f}'.format(cur_loss), (5, 10), color='white', fontsize='large')
+                    pred_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_pred.svg')
+                    plt.savefig(pred_quiver_path, bbox_inches='tight', dpi=1200)
+                    print(f'prediction quiver plot has been saved to {pred_quiver_path}')
 
+        avg_loss = np.mean(all_losses)
         print(f'\nModel inference on image [{start_index}:{end_index}] completed\n')
+        print(f'Avg loss is {avg_loss}')
         print(f'Min loss is {min_loss} at index {min_loss_index}')
 
         # save the result to a .text file
@@ -514,7 +521,7 @@ def main():
                     all_losses,
                     fmt='%10.5f',
                     header=f'{loss} of {end_index-start_index+1} image pairs',
-                    footer=f'Min loss is {min_loss} at index {min_loss_index}')
+                    footer=f'Avg loss is {avg_loss}, Min loss is {min_loss} at index {min_loss_index}')
         print(f'result sheet has been saved at {text_path}')
 
 if __name__ == "__main__":
