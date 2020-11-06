@@ -84,8 +84,9 @@ def flow_compute_color(u, v, convert_to_bgr=False):
 
     fk = (a + 1.0) / 2.0 * (num_colors - 1.0)
     k0 = np.floor(fk).astype(np.int32)
-    k1 = (k0 + 1) % num_colors
-    # k1[k1 == ncols] = 0
+    # k1 = (k0 + 1) % num_colors
+    k1 = k0 + 1
+    k1[k1 == num_colors] = 0
     f = fk - k0
     # f = 0 # uncomment to see original color wheel
 
@@ -104,7 +105,7 @@ def flow_compute_color(u, v, convert_to_bgr=False):
         #     final_color *= 0.75
         idx = (rad <= 1)
         final_color[idx]  = 1 - rad[idx] * (1 - final_color[idx])
-        final_color[~idx] = final_color[~idx] * 0.75   # out of range?
+        final_color[~idx] = final_color[~idx] * 0.75   # out of range
 
         # Note the 2-i => BGR instead of RGB
         if convert_to_bgr:
@@ -117,7 +118,7 @@ def flow_compute_color(u, v, convert_to_bgr=False):
     return flow_image
 
 
-def visualize_flow(flow_uv, clip_flow=None, convert_to_bgr=False):
+def visualize_flow(flow_uv, clip_flow=None, convert_to_bgr=False, max_vel=None):
     '''
     Expects a two dimensional flow image of shape [H,W,2]
     According to the C++ source code of Daniel Scharstein
@@ -137,13 +138,14 @@ def visualize_flow(flow_uv, clip_flow=None, convert_to_bgr=False):
     u = flow_uv[:, :, 0]
     v = flow_uv[:, :, 1]
 
-    # compute velocity magnitude
-    vel_magnitude = np.sqrt(np.square(u) + np.square(v))
-    max_vel = np.max(vel_magnitude)
+    # compute velocity magnitude if no input
+    if max_vel == None:
+        vel_magnitude = np.sqrt(np.square(u) + np.square(v))
+        max_vel = np.max(vel_magnitude)
 
     # normalize velocity
     epsilon = 1e-5
     u = u / (max_vel + epsilon)
     v = v / (max_vel + epsilon)
 
-    return flow_compute_color(u, v, convert_to_bgr)
+    return flow_compute_color(u, v, convert_to_bgr), max_vel

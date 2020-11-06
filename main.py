@@ -402,8 +402,8 @@ def main():
         # run the inference
         with torch.no_grad():
             # start and end of index (both inclusive)
-            start_index = 0
-            end_index = 250
+            start_index = 41
+            end_index = 41
             # check if input parameters are valid
             if start_index < 0:
                 raise Exception('Invalid start_index')
@@ -470,8 +470,12 @@ def main():
 
                 if visualize:
                     # visualize the flow
-                    cur_flow_true = plot.visualize_flow(cur_label_true)
-                    cur_flow_pred = plot.visualize_flow(cur_label_pred)
+                    cur_flow_true, max_vel = plot.visualize_flow(cur_label_true)
+                    # print(cur_flow_true[:10,:10])
+                    print(f'Label max vel magnitude is {max_vel}')
+                    cur_flow_pred, _ = plot.visualize_flow(cur_label_pred, max_vel=max_vel)
+                    # print(f'Pred max vel magnitude is {max_vel}')
+                    # print(cur_flow_pred[:10,:10])
 
                     # convert to Image
                     cur_test_image1 = Image.fromarray(test_data[k, :, :, 0].numpy())
@@ -487,10 +491,17 @@ def main():
                     skip = 8
                     plt.figure()
                     plt.imshow(cur_flow_true)
-                    plt.quiver(y_pos[::skip, ::skip],
-                                x_pos[::skip, ::skip],
-                                cur_label_true[::skip, ::skip, 0],
-                                -cur_label_true[::skip, ::skip, 1])
+                    # quiver plot with normalized vectors and fixed scale
+                    Q = plt.quiver(y_pos[::skip, ::skip],
+                                    x_pos[::skip, ::skip],
+                                    cur_label_true[::skip, ::skip, 0]/max_vel,
+                                    -cur_label_true[::skip, ::skip, 1]/max_vel,
+                                    scale=4.0,
+                                    scale_units='inches')
+                    Q._init()
+                    assert isinstance(Q.scale, float)
+                    print(f'\nQuiver plot scale is {Q.scale}')
+
                     plt.axis('off')
                     true_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_true.svg')
                     plt.savefig(true_quiver_path, bbox_inches='tight', dpi=1200)
@@ -501,8 +512,10 @@ def main():
                     plt.imshow(cur_flow_pred)
                     plt.quiver(y_pos[::skip, ::skip],
                                 x_pos[::skip, ::skip],
-                                cur_label_pred[::skip, ::skip, 0],
-                                -cur_label_pred[::skip, ::skip, 1])
+                                cur_label_pred[::skip, ::skip, 0]/max_vel,
+                                -cur_label_pred[::skip, ::skip, 1]/max_vel,
+                                scale=Q.scale,
+                                scale_units='inches')
                     plt.axis('off')
                     # annotate error
                     plt.annotate(f'{loss}: ' + '{:.3f}'.format(cur_loss), (5, 10), color='white', fontsize='large')
