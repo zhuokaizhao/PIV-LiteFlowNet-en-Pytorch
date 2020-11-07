@@ -431,21 +431,19 @@ def main():
 
             for k in range(start_index, end_index+1):
                 cur_image_pair = test_data[k:k+1].to(device)
-                cur_label_true = test_labels[k].permute(1, 2, 0).numpy()
+                cur_label_true = test_labels[k].permute(1, 2, 0).numpy() / 256.0
                 # get prediction from loaded model
                 prediction = piv_lfn_en(cur_image_pair)
 
                 # put on cpu and permute to channel last
                 cur_label_pred = prediction.cpu().data
                 cur_label_pred = cur_label_pred.permute(0, 2, 3, 1).numpy()
-                cur_label_pred = cur_label_pred[0]
+                cur_label_pred = cur_label_pred[0] / 256.0
 
                 # compute loss
                 cur_loss = loss_module(torch.from_numpy(cur_label_pred), torch.from_numpy(cur_label_true))
                 if loss == 'RMSE':
                     cur_loss = torch.sqrt(cur_loss)
-                    # convert to per pixel
-                    cur_loss = cur_loss / final_size
                 elif loss == 'AEE':
                     sum_endpoint_error = 0
                     for i in range(final_size):
@@ -522,6 +520,18 @@ def main():
                     pred_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_pred.svg')
                     plt.savefig(pred_quiver_path, bbox_inches='tight', dpi=1200)
                     print(f'prediction quiver plot has been saved to {pred_quiver_path}')
+
+                    # visualize and save the error magnitude
+                    pred_error = np.sqrt(cur_label_pred[:,:,0]**2 + cur_label_pred[:,:,1]**2) \
+                                    - np.sqrt(cur_label_true[:,:,0]**2 + cur_label_true[:,:,1]**2)
+                    plt.figure()
+                    plt.imshow(pred_error, cmap='RdBu', interpolation='nearest', vmin=-1, vmax=1)
+                    error_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_error.svg')
+                    plt.axis('off')
+                    cbar = plt.colorbar()
+                    cbar.set_label('Vector magnitude difference')
+                    plt.savefig(error_path, bbox_inches='tight', dpi=1200)
+                    print(f'error magnitude plot has been saved to {error_path}')
 
         avg_loss = np.mean(all_losses)
         print(f'\nModel inference on image [{start_index}:{end_index}] completed\n')
