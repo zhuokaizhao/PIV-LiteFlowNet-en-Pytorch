@@ -11,7 +11,6 @@ please acknowledge it appropriately.
 #!/usr/bin/env python
 
 import torch
-
 import cupy
 import math
 import re

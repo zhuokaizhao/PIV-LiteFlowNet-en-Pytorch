@@ -2,11 +2,23 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import timeit
 import numpy as np
-from PIL import Image
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+
+
+# convert a n*n*2 array, which is n*n array of 2D vectors into polar coordinates (r, theta)
+def cart2pol(array_cart):
+    dim = array_cart.shape
+    if len(dim) != 3:
+        raise Exception(f'Unsupporting matrix dimension {dim}')
+    elif dim[2] != 2:
+        raise Exception(f'Only 2D vector supported')
+
+    # output array
+    array_pol = np.zeros(dim)
+    array_pol[:, :, 0] = np.sqrt(array_cart[:, :, 0]**2 + array_cart[:, :, 1]**2)
+    array_pol[:, :, 1] = np.arctan2(array_cart[:, :, 1], array_cart[:, :, 0])
+
+    return array_pol
 
 
 def make_colorwheel():

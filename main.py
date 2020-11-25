@@ -7,23 +7,13 @@ from __future__ import print_function
 
 import os
 import sys
-import png
-import math
-import glob
 import time
-import copy
 import torch
-import timeit
-import random
-import imageio
 import argparse
-import itertools
 import subprocess
 import numpy as np
-import pyvista as pv
-from datetime import datetime
 import matplotlib.pyplot as plt
-from PIL import Image, ImageOps, ImageFont, ImageDraw
+from PIL import Image
 
 import load_data
 import model
@@ -99,7 +89,7 @@ def main():
     # checkpoint path for continuing training
     parser.add_argument('-c', action='store', nargs=1, dest='checkpoint_path')
     # input or output model directory
-    parser.add_argument('-m', '--model', action='store', nargs=1, dest='model_dir')
+    parser.add_argument('-m', '--model-dir', action='store', nargs=1, dest='model_dir')
     # output directory (tfrecord in 'data' mode, figure in 'training' mode)
     parser.add_argument('-o', '--output-dir', action='store', nargs=1, dest='output_dir')
     # verbosity
@@ -441,22 +431,37 @@ def main():
                 cur_label_pred = cur_label_pred[0] / 256.0
 
                 # compute loss
-                cur_loss = loss_module(torch.from_numpy(cur_label_pred), torch.from_numpy(cur_label_true))
-                if loss == 'RMSE':
-                    cur_loss = torch.sqrt(cur_loss)
-                elif loss == 'AEE':
-                    sum_endpoint_error = 0
-                    for i in range(final_size):
-                        for j in range(final_size):
-                            cur_pred = cur_label_pred[i, j]
-                            cur_true = cur_label_true[i, j]
-                            cur_endpoint_error = np.linalg.norm(cur_pred-cur_true)
-                            sum_endpoint_error += cur_endpoint_error
+                if loss == 'RMSE' or loss == 'AEE':
+                    cur_loss = loss_module(torch.from_numpy(cur_label_pred), torch.from_numpy(cur_label_true))
+                    if loss == 'RMSE':
+                        cur_loss = torch.sqrt(cur_loss)
+                    elif loss == 'AEE':
+                        sum_endpoint_error = 0
+                        for i in range(final_size):
+                            for j in range(final_size):
+                                cur_pred = cur_label_pred[i, j]
+                                cur_true = cur_label_true[i, j]
+                                cur_endpoint_error = np.linalg.norm(cur_pred-cur_true)
+                                sum_endpoint_error += cur_endpoint_error
 
-                    # compute the average endpoint error
-                    aee = sum_endpoint_error / (final_size*final_size)
-                    # convert to per 100 pixels for comparison purpose
-                    cur_loss = aee / final_size
+                        # compute the average endpoint error
+                        aee = sum_endpoint_error / (final_size*final_size)
+                        # convert to per 100 pixels for comparison purpose
+                        cur_loss = aee / final_size
+                # customized metric that converts into polar coordinates and compare
+                elif loss == 'polar':
+                    # convert both truth and predictions to polar coordinate
+                    cur_label_true_polar = plot.cart2pol(cur_label_true)
+                    cur_label_pred_polar = plot.cart2pol(cur_label_pred)
+                    # absolute magnitude difference and angle difference
+                    r_diff_mean = np.abs(cur_label_true_polar[:, :, 0]-cur_label_pred_polar[:, :, 0]).mean()
+                    theta_diff = np.abs(cur_label_true_polar[:, :, 1]-cur_label_pred_polar[:, :, 1])
+                    # wrap around for angles larger than pi
+                    theta_diff[theta_diff>2*np.pi] = 2*np.pi - theta_diff[theta_diff>2*np.pi]
+                    # compute the mean of angle difference
+                    theta_diff_mean = theta_diff.mean()
+                    # take the sum as single scalar loss
+                    cur_loss = r_diff_mean + theta_diff_mean
 
                 if cur_loss < min_loss:
                     min_loss = cur_loss
@@ -516,7 +521,11 @@ def main():
                                 scale_units='inches')
                     plt.axis('off')
                     # annotate error
-                    plt.annotate(f'{loss}: ' + '{:.3f}'.format(cur_loss), (5, 10), color='white', fontsize='large')
+                    if loss == 'polar':
+                        plt.annotate(f'Magnitude MAE: ' + '{:.3f}'.format(r_diff_mean), (5, 10), color='white', fontsize='medium')
+                        plt.annotate(f'Angle MAE: ' + '{:.3f}'.format(theta_diff_mean), (5, 20), color='white', fontsize='medium')
+                    else:
+                        plt.annotate(f'{loss}: ' + '{:.3f}'.format(cur_loss), (5, 10), color='white', fontsize='large')
                     pred_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_pred.svg')
                     plt.savefig(pred_quiver_path, bbox_inches='tight', dpi=1200)
                     print(f'prediction quiver plot has been saved to {pred_quiver_path}')
