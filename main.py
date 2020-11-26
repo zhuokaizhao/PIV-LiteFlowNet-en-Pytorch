@@ -531,14 +531,14 @@ def main():
                     print(f'prediction quiver plot has been saved to {pred_quiver_path}')
 
                     # visualize and save the error magnitude
-                    pred_error = np.sqrt(cur_label_pred[:,:,0]**2 + cur_label_pred[:,:,1]**2) \
-                                    - np.sqrt(cur_label_true[:,:,0]**2 + cur_label_true[:,:,1]**2)
+                    pred_error = np.sqrt((cur_label_pred[:,:,0]-cur_label_true[:,:,0])**2 \
+                                        + (cur_label_pred[:,:,1]-cur_label_true[:,:,1])**2)
                     plt.figure()
-                    plt.imshow(pred_error, cmap='RdBu', interpolation='nearest', vmin=-1, vmax=1)
+                    plt.imshow(pred_error, cmap='PuBuGn', interpolation='nearest', vmin=0.0,  vmax=1.0)
                     error_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_error.svg')
                     plt.axis('off')
                     cbar = plt.colorbar()
-                    cbar.set_label('Vector magnitude difference')
+                    # cbar.set_label('Endpoint error')
                     plt.savefig(error_path, bbox_inches='tight', dpi=1200)
                     print(f'error magnitude plot has been saved to {error_path}')
 
