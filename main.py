@@ -87,7 +87,7 @@ def main():
     # loss function
     parser.add_argument('-l', '--loss', action='store', nargs=1, dest='loss')
     # checkpoint path for continuing training
-    parser.add_argument('-c', action='store', nargs=1, dest='checkpoint_path')
+    parser.add_argument('-c', '--checkpoint-dir', action='store', nargs=1, dest='checkpoint_path')
     # input or output model directory
     parser.add_argument('-m', '--model-dir', action='store', nargs=1, dest='model_dir')
     # output directory (tfrecord in 'data' mode, figure in 'training' mode)
@@ -327,12 +327,12 @@ def main():
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend(loc='upper right')
-        loss_path = os.path.join(figs_dir, f'piv_lfn_en_loss_{starting_epoch+num_epoch}.png')
+        loss_path = os.path.join(figs_dir, f'piv_lfn_en_batch{batch_size}_epoch{starting_epoch+num_epoch}.png')
         plt.savefig(loss_path)
         print(f'\nLoss graph has been saved to {loss_path}')
 
         # save model as a checkpoint so further training could be resumed
-        model_path = os.path.join(model_dir, f'PIV-LiteFlowNet-en_{starting_epoch+num_epoch}.pt')
+        model_path = os.path.join(model_dir, f'piv_lfn_en_batch{batch_size}_epoch{starting_epoch+num_epoch}.pt')
         # if trained on multiple GPU's, store model.module.state_dict()
         if torch.cuda.device_count() > 1:
             model_checkpoint = {
@@ -421,14 +421,14 @@ def main():
 
             for k in range(start_index, end_index+1):
                 cur_image_pair = test_data[k:k+1].to(device)
-                cur_label_true = test_labels[k].permute(1, 2, 0).numpy() / 256.0
+                cur_label_true = test_labels[k].permute(1, 2, 0).numpy() / final_size
                 # get prediction from loaded model
                 prediction = piv_lfn_en(cur_image_pair)
 
                 # put on cpu and permute to channel last
                 cur_label_pred = prediction.cpu().data
                 cur_label_pred = cur_label_pred.permute(0, 2, 3, 1).numpy()
-                cur_label_pred = cur_label_pred[0] / 256.0
+                cur_label_pred = cur_label_pred[0] / final_size
 
                 # compute loss
                 if loss == 'RMSE' or loss == 'AEE':
