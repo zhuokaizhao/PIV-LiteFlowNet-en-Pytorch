@@ -12,18 +12,15 @@ import torch
 import argparse
 import subprocess
 import numpy as np
-import matplotlib.pyplot as plt
 from PIL import Image
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 import load_data
 import model
 import plot
 
-# preferably use the non-display gpu for training
-# os.environ['CUDA_VISIBLE_DEVICES']='0, 1'
-os.environ['CUDA_VISIBLE_DEVICES']='0'
-# preferably use the display gpu for testing
-# os.environ['CUDA_VISIBLE_DEVICES']='2'
+os.environ['CUDA_VISIBLE_DEVICES']='2'
 
 print('\n\nPython VERSION:', sys.version)
 print('PyTorch VERSION:', torch.__version__)
@@ -92,6 +89,9 @@ def main():
     parser.add_argument('-m', '--model-dir', action='store', nargs=1, dest='model_dir')
     # output directory (tfrecord in 'data' mode, figure in 'training' mode)
     parser.add_argument('-o', '--output-dir', action='store', nargs=1, dest='output_dir')
+    # start and end t used when testing (both inclusive)
+    parser.add_argument('--start-t', action='store', nargs=1, dest='start_t')
+    parser.add_argument('--end-t', action='store', nargs=1, dest='end_t')
     # verbosity
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', default=False)
     args = parser.parse_args()
@@ -367,6 +367,8 @@ def main():
         # useful arguments in this mode
         target_dim = 2
         loss = args.loss[0]
+        start_t = int(args.start_t[0])
+        end_t = int(args.end_t[0])
         final_size = 256
 
         # Read data
@@ -388,16 +390,18 @@ def main():
             print(f'number of image channel: {num_channels}')
             print(f'test_data has shape: {test_data.shape}')
             print(f'test_labels has shape: {test_labels.shape}')
+            print(f'start_t: {start_t}')
+            print(f'end_t: {end_t}')
 
         # run the inference
         with torch.no_grad():
             # start and end of index (both inclusive)
-            start_index = 41
-            end_index = 41
+            # start_index = 25
+            # end_index = 25
             # check if input parameters are valid
-            if start_index < 0:
+            if start_t < 0:
                 raise Exception('Invalid start_index')
-            elif end_index > test_data.shape[0]-1:
+            elif end_t > test_data.shape[0]-1:
                 raise Exception(f'Invalid end_index > total number of image pair {test_data.shape[0]}')
 
             # define the loss
@@ -419,7 +423,7 @@ def main():
             min_loss_index = 0
             all_losses = []
 
-            for k in range(start_index, end_index+1):
+            for k in range(start_t, end_t+1):
                 cur_image_pair = test_data[k:k+1].to(device)
                 cur_label_true = test_labels[k].permute(1, 2, 0).numpy() / final_size
                 # get prediction from loaded model
@@ -534,7 +538,7 @@ def main():
                     pred_error = np.sqrt((cur_label_pred[:,:,0]-cur_label_true[:,:,0])**2 \
                                         + (cur_label_pred[:,:,1]-cur_label_true[:,:,1])**2)
                     plt.figure()
-                    plt.imshow(pred_error, cmap='PuBuGn', interpolation='nearest', vmin=0.0,  vmax=1.0)
+                    plt.imshow(pred_error, cmap='PuBuGn', interpolation='nearest', vmin=0.0,  vmax=0.2)
                     error_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_error.svg')
                     plt.axis('off')
                     cbar = plt.colorbar()
@@ -543,18 +547,21 @@ def main():
                     print(f'error magnitude plot has been saved to {error_path}')
 
         avg_loss = np.mean(all_losses)
-        print(f'\nModel inference on image [{start_index}:{end_index}] completed\n')
+        print(f'\nModel inference on image [{start_t}:{end_t}] completed\n')
         print(f'Avg loss is {avg_loss}')
         print(f'Min loss is {min_loss} at index {min_loss_index}')
+        # save all the losses to file
+        loss_path = os.path.join(figs_dir, f'piv-lfn-en_{start_t}_{end_t}_all_losses.npy')
+        np.save(loss_path, all_losses)
+        # generate loss curve plot
+        t = np.arange(start_t, end_t+1)
+        fig, ax = plt.subplots()
+        ax.plot(t, all_losses)
+        ax.set(xlabel='timestamp', ylabel=f'{loss}')
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        loss_curve_path = os.path.join(figs_dir, f'piv-lfn-en_{start_t}_{end_t}_all_losses.svg')
+        fig.savefig(loss_curve_path, bbox_inches='tight')
 
-        # save the result to a .text file
-        text_path = os.path.join(figs_dir, 'results_sheet.txt')
-        np.savetxt(text_path,
-                    all_losses,
-                    fmt='%10.5f',
-                    header=f'{loss} of {end_index-start_index+1} image pairs',
-                    footer=f'Avg loss is {avg_loss}, Min loss is {min_loss} at index {min_loss_index}')
-        print(f'result sheet has been saved at {text_path}')
 
 if __name__ == "__main__":
     main()
