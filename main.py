@@ -20,7 +20,7 @@ import load_data
 import model
 import plot
 
-os.environ['CUDA_VISIBLE_DEVICES']='2'
+os.environ['CUDA_VISIBLE_DEVICES']='1'
 
 print('\n\nPython VERSION:', sys.version)
 print('PyTorch VERSION:', torch.__version__)
@@ -363,7 +363,7 @@ def main():
 
         test_dir = args.test_dir[0]
         model_dir = args.model_dir[0]
-        figs_dir = args.output_dir[0]
+        output_dir = args.output_dir[0]
         # useful arguments in this mode
         target_dim = 2
         loss = args.loss[0]
@@ -378,14 +378,15 @@ def main():
         # parameters loaded from input data
         num_channels = test_data.shape[1] // 2
 
-        visualize = True
+        save_prediction = True
+        visualize = False
 
         if verbose:
             print(f'\nmode: {mode}')
             print(f'\nGPU usage: {device}')
             print(f'testing data dir: {test_dir}')
             print(f'input model dir: {model_dir}')
-            print(f'output figures dir: {figs_dir}')
+            print(f'output figures dir: {output_dir}')
             print(f'loss function: {loss}')
             print(f'number of image channel: {num_channels}')
             print(f'test_data has shape: {test_data.shape}')
@@ -432,7 +433,17 @@ def main():
                 # put on cpu and permute to channel last
                 cur_label_pred = prediction.cpu().data
                 cur_label_pred = cur_label_pred.permute(0, 2, 3, 1).numpy()
-                cur_label_pred = cur_label_pred[0] / final_size
+                # cur_label_pred = cur_label_pred[0] / final_size
+                cur_label_pred = cur_label_pred[0]
+
+                if save_prediction:
+                    # predictions
+                    result_dir = os.path.join(output_dir, 'lfn_vel_field')
+                    os.makedirs(result_dir, exist_ok=True)
+                    result_path = os.path.join(result_dir, f'lfn_velocity_{k}.npz')
+                    np.savez(result_path,
+                            velocity=cur_label_pred)
+                    print(f'LFN velocity has been saved to {result_path}')
 
                 # compute loss
                 if loss == 'RMSE' or loss == 'AEE':
@@ -510,7 +521,7 @@ def main():
                     print(f'\nQuiver plot scale is {Q.scale}')
 
                     plt.axis('off')
-                    true_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_true.svg')
+                    true_quiver_path = os.path.join(output_dir, f'piv-lfn-en_{k}_true.svg')
                     plt.savefig(true_quiver_path, bbox_inches='tight', dpi=1200)
                     print(f'ground truth quiver plot has been saved to {true_quiver_path}')
 
@@ -530,7 +541,7 @@ def main():
                         plt.annotate(f'Angle MAE: ' + '{:.3f}'.format(theta_diff_mean), (5, 20), color='white', fontsize='medium')
                     else:
                         plt.annotate(f'{loss}: ' + '{:.3f}'.format(cur_loss), (5, 10), color='white', fontsize='large')
-                    pred_quiver_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_pred.svg')
+                    pred_quiver_path = os.path.join(output_dir, f'piv-lfn-en_{k}_pred.svg')
                     plt.savefig(pred_quiver_path, bbox_inches='tight', dpi=1200)
                     print(f'prediction quiver plot has been saved to {pred_quiver_path}')
 
@@ -539,7 +550,7 @@ def main():
                                         + (cur_label_pred[:,:,1]-cur_label_true[:,:,1])**2)
                     plt.figure()
                     plt.imshow(pred_error, cmap='PuBuGn', interpolation='nearest', vmin=0.0,  vmax=0.2)
-                    error_path = os.path.join(figs_dir, f'piv-lfn-en_{k}_error.svg')
+                    error_path = os.path.join(output_dir, f'piv-lfn-en_{k}_error.svg')
                     plt.axis('off')
                     cbar = plt.colorbar()
                     # cbar.set_label('Endpoint error')
@@ -551,7 +562,7 @@ def main():
         print(f'Avg loss is {avg_loss}')
         print(f'Min loss is {min_loss} at index {min_loss_index}')
         # save all the losses to file
-        loss_path = os.path.join(figs_dir, f'piv-lfn-en_{start_t}_{end_t}_all_losses.npy')
+        loss_path = os.path.join(output_dir, f'piv-lfn-en_{start_t}_{end_t}_all_losses.npy')
         np.save(loss_path, all_losses)
         # generate loss curve plot
         t = np.arange(start_t, end_t+1)
@@ -559,7 +570,7 @@ def main():
         ax.plot(t, all_losses)
         ax.set(xlabel='timestamp', ylabel=f'{loss}')
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        loss_curve_path = os.path.join(figs_dir, f'piv-lfn-en_{start_t}_{end_t}_all_losses.svg')
+        loss_curve_path = os.path.join(output_dir, f'piv-lfn-en_{start_t}_{end_t}_all_losses.svg')
         fig.savefig(loss_curve_path, bbox_inches='tight')
 
 
